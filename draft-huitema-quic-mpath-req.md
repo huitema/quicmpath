@@ -2,10 +2,10 @@
     Title = "QUIC Multipath Requirements"
     abbrev = "QUIC Multipath Requirements"
     category = "info"
-    docName= "draft-huitema-quic-mpath-req-00"
+    docName= "draft-huitema-quic-mpath-req-01"
     ipr = "trust200902"
     area = "Network"
-    date = 2017-12-27
+    date = 2018-01-07
     [pi]
     toc = "yes"
     compact = "yes"
@@ -57,29 +57,41 @@ it first is obviously a pretty reasonable way to manage a complex project
 like the development of QUIC. However, there is a risk that decisions made
 during the development of the first version might
 preclude some options that we may later find attractive when developing the
-multipath extension. 
+multipath extension.
 
-The purpose of this document is thus to explore
-the multicast requirements and plausible solutions, in order to
+It is almost impossible to discuss Multipath QUIC in an IETF context without
+making references to the Multipath extensions for TCP (MTCP), specified in [@?RFC6824].
+The specification explains
+how to provide the same type of service to applications as TCP (i.e., reliable
+bytestream), while using multiple TCP flows across potentially disjoint paths.
+The details of the MTCP design are very specific to TCP, but many high level
+principles and experiences can inform the design of multipath QUIC.  
+
+The purpose of this document is to explore
+the multipath requirements and plausible solutions, in order to
 inform the development of QUIC V1 and hopefully facilitate a smooth
 introduction of multipath extensions after V1 is standardized.
 
 # QUIC Multipath Scenarios
 
-The classic multipath scenarios involve splitting a connnections traffic over
+The classic multipath scenarios involve splitting a connection's traffic over
 several paths, aiming for either better reliability by using several redundant paths,
 or better performance by balancing the traffic load over several
-path. Redundancy and load balancing define broad scenarios which will certainly
+path. For example, we see load balancing between equal cost multipaths using MTCP 
+documented in [@?RFC8041]. 
+Redundancy and load balancing define broad scenarios which will certainly
 be applicable to QUIC, but a couple of
 more specific scenarios have been discussed during the early development of QUIC.
 These scenarios include NAT re-binding, client migration, and anycast servers.
+
 
 The classical example of client migration is the transition from one type of
 connectivity, e.g. Wi-Fi, to another, e.g. LTE. Client migration is often handled
 through a "make before break" strategy, in which a new "path" is established
 and tested before switching to it and decommisioning the old path. Such strategies
 involve maintaining the old and the new path active during the testing time, and
-thus require a simple form of multipath management. 
+thus require a simple form of multipath management. This is one of the scenarios
+studied in the context of MTCP, and documented in [@?RFC8041].
 
 Many services are deployed using anycast addresses, which allow a client to
 get automatically connected to the closest available server. However, the connectivity
@@ -117,7 +129,7 @@ multiplexed as a number of streams.
 ```
 
 Most experts will recognize that the partition between the stream layer and the
-packet layer provides a natural opportunity for implementing multicast. For example,
+packet layer provides a natural opportunity for implementing multipath. For example,
 when describing a pre-standard experiment with QUIC multipath
 [@?I-D.deconinck-multipath-quic],  De Coninck and Bonaventure state that
 "Since nearly all QUIC frames are independent of packets, no change is required
@@ -147,18 +159,17 @@ IP addresses and ports on which the new packet is received.
 In other scenarios, servers may ask clients to initiate new paths, for example in order
 to transition away from an anycast address. This requires communicating the additional
 addresses to the other peer. This may require defining an "ADD_ADDRESS" frame, as
-suggested in [@?I-D.deconinck-multipath-quic].
+suggested in [@?I-D.deconinck-multipath-quic], if we want the additonal addresses to
+be passed withing QUIC. An alternative might be to let applications exchange addresses
+as part of their application protocol, and to use an API to "plumb" these addresses
+in the QUIC context.
 
 Paths are normally initiated by having one peer send an encrypted packet to the other
 peer. The encrypted packet carries a connection identifiers that was previously associated
 with the connection, typically through a "NEW_CONNECTION_ID" frame. Privacy issues
-related to the use of connection identifiers are discussed in (#privacy).
-
-Successful decryption of a packet is not enough to initiate a new path, because of
-the risks of MITM attacks and "rogue peer" attacks. These attacks are discussed in
-the transport draft [@?I-D.ietf-quic-transport] in the context of connection
-migration. The proposed solution is to have an explicit handshake in which each peer
-demonstrates that it can send and receive packets on the proposed path.
+related to the use of connection identifiers are discussed in (#privacy). In addition to
+privacy issues, we need to also consider the security issues, and specifically the
+risk of enabling denial of service attacks, as discussed in (#security).
 
 ## Privacy
 
@@ -184,7 +195,24 @@ identifiers. (The experiment described in
 
 Note that these requirements are necessary, but may not be sufficient.
 Connections can potentially be correlated by observing packet timings and
-other characteristics. 
+other characteristics.
+
+## Security
+
+Path creation mechanisms can potentially be abused to enable denial of service
+against third parties. A rogue client could for example send path creation packets
+in which the source address is spoofed, and points to a third party. If the
+server accepts the path, it could then direct a stream of packets to that third
+party, contributing to a denial of service attack.
+
+Similar attacks could be mounted by "man-in-the-middle" or "man-on-the-side"
+attackers, would could capture a legitimate client packet and replay it with a
+different source address.
+
+These attacks are discussed in the transport draft [@?I-D.ietf-quic-transport]
+in the context of connection migration. The proposed solution is to have an explicit
+handshake in which each peer demonstrates that it can send and receive packets on the
+proposed path.
 
 ## Non Detectability
 
@@ -200,13 +228,13 @@ would increase the risk of ossification.
 
 To prevent such risks, the multipath extensions should use pretty much the same
 packet header formats as QUIC V1. (The experiment described in
-[@?I-D.deconinck-multipath-quic] does not meet this requirement.)
+[@?I-D.deconinck-multipath-quic] was not attempting to meet this requirement.)
 
 ## Error Detection
 
 In QUIC, errors are detected by observing holes in the received acknowledgements.
 A packet will be declared lost if it is not acknowledged by the receiver, while
-later transmitted packets are. We could design multicast extensions to operate 
+later transmitted packets are. We could design multipath extensions to operate 
 error detection either separately on each path, or
 globally on the entire set of paths. 
 
@@ -239,8 +267,9 @@ If independent sequence numbers are used for each path, implementations will
 have to maintain separate retransmission queues for each path. ACK frames
 will need to be specific to a given path, either because they are sent on that
 path, or because they carry an identifier of the path (the solution adopted in
-[@?I-D.deconinck-multipath-quic]).
-
+[@?I-D.deconinck-multipath-quic]). The "identifier" variant allows acknowledgements
+for one path to be sent on another path, which may prove very useful when dealing
+with some error conditions.
 
 ## Congestion Control
 
@@ -254,8 +283,30 @@ with this IPv4/IPv6 example, chances are that some network elements will perform
 differently, for example by performing Network Address Translation for IPv4.
 
 Since different paths experience different network conditions, it follows that
-congestion control should be executed separately for each path, just like it is
-executed separately for each subflow in MPTCP [@?RFC6824].
+congestion control should be executed separately for each path. We should note that
+the experimental congestion control for MTCP [@?RFC6356] tries to meet three
+separate goals:
+
+   *  Goal 1 (Improve Throughput) A multipath flow should perform at
+      least as well as a single path flow would on the best of the paths
+      available to it.
+
+   *  Goal 2 (Do no harm) A multipath flow should not take up more
+      capacity from any of the resources shared by its different paths
+      than if it were a single flow using only one of these paths.  This
+      guarantees it will not unduly harm other flows.
+
+   *  Goal 3 (Balance congestion) A multipath flow should move as much
+      traffic as possible off its most congested paths, subject to
+      meeting the first two goals.
+
+Having separate instances of congestion control on each path will meet the second goal,
+and will also meet the first goal if combined with proper scheduling of frames on
+different paths. However, purely independent control of each path is not sufficient
+to meet the third goal, which is why "coupled congestion control" is introduced
+in [@?RFC6356]. This is largely a research issue. It is likely that initial
+deployments of multipath QUIC will start with a coupled congestion control
+similar to [@?RFC6356], before exploring alternatives.
 
 Congestion control algorithms require measuring acknowledgements, losses and delays
 on each specific path. This happens naturally if independent sequence numbers
@@ -272,15 +323,23 @@ overwhelm the receiver. In the first version of QUIC, this protection is
 ensured by connection level flow control, using MAX DATA frames, and stream level
 flow control, using MAX STREAM DATA frames.
 
-The connection level MAX DATA frame may not provide sufficient protection against
+At some theoretical level, one may worry that the connection level MAX DATA
+frame may not provide sufficient protection against
 excessive use of individual paths. For example, in a migration scenario, a low
 capacity path may inherit large credits from MAX DATA frames received on
-a high capacity path. To protect individual path, peers would need to manage
-an independent flow control limit on each path, perhaps using a multipath
+a high capacity path. If this turned out to be a real problem, peers would need
+to manage an independent flow control limit on each path, perhaps using a multipath
 specific MAX PATH DATA frame.
 
-Managing flow control for each path with MAX PATH DATA frames may make the MAX DATA
-frames redondant. This would have to be studied as part of multipath extension design.
+On the other hand, we can observe that MTCP uses the same flow control window
+for each separate path. This was done after considering using different windows
+for different paths, as explained in [@NSDI12]. If the same window is used for
+all paths, we have the guarantee that should one path fail, all packets sent on
+that path can be retransmitted on any of the other paths, without having
+to wait for flow control updates.
+
+Based on the MTCP experience, we should assume that in the first versions of
+multipath QUIC, flow control will remain a global "stream level" function.
 
 ## Packet Encryption
 
@@ -324,6 +383,10 @@ derive a unique masking number by computing the keyed hash or the encryption of 
 16 bytes in the encrypted payload, and then XOR the sequence number field in the packet
 header with that masking number.
 
+On the other hand, on-path diagnostic tools currently observe the packet numbers to
+detect transmission errors and thus potential network level issues. Encrypting the
+packet numbers would impede these tools.
+
 ## Key Phases
 
 It is generally considered unsafe to encrypt "too much" data with a single encryption
@@ -344,6 +407,18 @@ one path while the other paths remain silent.
 
 The KEY_PHASE bit linkability does not occur if different paths use independently
 derived key materials, which is one of the option suggested in (#packet-encryption).
+
+## Key and sequence numbers per path
+
+Our initial analysis pointed to two possible designs, a global sequence packet sequence
+number common to all paths, or separate packet sequence numbers for each path.
+After reviewing the consequences, it is clear that the simplest design is to
+use different keys and separate sequence numbers for each path. This is consistent
+with the use of a separate CONNECTION-ID for each path. It does not require encrypting
+the sequence number, and thus does not impede develoment of network quality
+monitoring tools. It can also provide an alternative to the KEY_PHASE mechanism:
+if too much data was sent on a path and new keying material is needed, just open
+a new path.
 
 # Next Steps
 
@@ -367,12 +442,34 @@ issues listed in (#quic-multipath-requirements). In particular:
 * implementations should manage separate congestion control contexts for 
   each path, as explained in (#congestion-control).
 
-* the standard should consider packet sequence number encryption to suppress
-  linkability issues, as explained in (#sequence-number-encryption).
+* the standard should consider simple ways to associate different encryption
+  contexts with each path and each connection-ID.
 
 # Acknowledgements
 
-Many of the issues in this draft were laready debated in the QUIC working group.
+Many of the issues in this draft were already debated in the QUIC working group.
+Thanks to Yoshifumi Nishida and Martin Thomson for their constructive comments.
+Thanks also to
+Olivier Bonaventure and Quentin De Coninck for detailed feedback on the
+first version of this draft, and for many references to the experience gained with
+MTCP.
+
+<reference anchor="NSDI12" target="https://www.usenix.org/system/files/conference/nsdi12/nsdi12-final125.pdf">
+        <front>
+          <title>How hard can it be? designing and implementing a deployable multipath TCP</title>
+          <author initials="C." surname="Raicius" fullname="Costin Raicius"/>
+          <author initials="C." surname="Paasch" fullname="Christoph Paasch"/>
+          <author initials="S." surname="Barre" fullname="Sebastien Barre"/>
+          <author initials="A." surname="Ford" fullname="Alan Ford"/> 	
+          <author initials="M." surname="Honda" fullname="Michio Honda"/>
+          <author initials="F." surname="Duchene" fullname="Fabien Duchene"/>
+          <author initials="O." surname="Bonaventure" fullname="Olivier Bonaventure"/>
+          <author initials="M." surname="Handley" fullname="Mark Handley"/>          
+          <date year="2012" month="April" day="25" />
+        </front>
+        <seriesInfo 
+name="NSDI'12" value="Proceedings of the 9th USENIX conference on Networked Systems Design and Implementation" />
+      </reference>
 
 
 {backmatter}
