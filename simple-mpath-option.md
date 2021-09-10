@@ -24,6 +24,118 @@ author:
         country: U.S.A
         email: huitema@huitema.net
 
+
+  QUIC-TRANSPORT:
+    title: "QUIC: A UDP-Based Multiplexed and Secure Transport"
+    date: {DATE}
+    seriesinfo:
+      Internet-Draft: draft-ietf-quic-transport
+    author:
+      -
+        ins: J. Iyengar
+        name: Jana Iyengar
+        org: Fastly
+        role: editor
+      -
+        ins: M. Thomson
+        name: Martin Thomson
+        org: Mozilla
+        role: editor
+
+  QUIC-TLS:
+    title: "Using TLS to Secure QUIC"
+    date: {DATE}
+    seriesinfo:
+      Internet-Draft: draft-ietf-quic-tls
+    author:
+      -
+        ins: M. Thomson
+        name: Martin Thomson
+        org: Mozilla
+        role: editor
+      -
+        ins: S. Turner
+        name: Sean Turner
+        org: sn3rd
+        role: editor
+
+  QUIC-RECOVERY:
+    title: "QUIC Loss Detection and Congestion Control"
+    date: {DATE}
+    seriesinfo:
+      Internet-Draft: draft-ietf-quic-recovery
+    author:
+      -
+        ins: J. Iyengar
+        name: Jana Iyengar
+        org: Fastly
+        role: editor
+      -
+        ins: I. Swett
+        name: Ian Swett
+        org: Google
+        role: editor
+
+  QUIC-LB:
+    title: "QUIC-LB: Generating Routable QUIC Connection IDs"
+    date: {DATE}
+    seriesinfo:
+      Internet-Draft: draft-ietf-quic-load-balancers
+    author:
+      -
+        ins: M. Duke
+        name: Martin Duke
+        org: F5 Networks, Inc.
+        role: editor
+      -
+        ins: N. Banks
+        name: Nick Banks
+        org: Microsoft
+        role: editor
+
+
+informative:
+
+  QUIC-MP-LIU:
+    title: "Multipath Extension for QUIC"
+    date: {DATE}
+    seriesinfo:
+      Internet-Draft: draft-ietf-quic-recovery
+    author:
+      -
+        ins: Y. Liu
+        name: Yanmei Liu
+        org: Alibaba Inc.
+        email: miaoji.lym@alibaba-inc.com
+      -
+        ins: Y. Ma
+        name: Yunfei Ma
+        org: Alibaba Inc.
+        email: yunfei.ma@alibaba-inc.com
+      -
+        ins: C. Huitema
+        name: Christian Huitema
+        org: Private Octopus Inc.
+        email: huitema@huitema.net
+      -
+        ins: Q. An
+        name: Qing An
+        org: Alibaba Inc.
+        email: anqing.aq@alibaba-inc.com
+      -
+        ins: Z. Li
+        name: Zhenyu Li
+        org: ICT-CAS
+        email: zyli@ict.ac.cn
+    target: "https://datatracker.ietf.org/doc/draft-liu-multipath-quic/"
+
+  QUIC-Timestamp:
+    title: "Quic Timestamps For Measuring One-Way Delays"
+    author:
+      - ins: C. Huitema
+    date: 2020-8
+    target: "https://datatracker.ietf.org/doc/draft-huitema-quic-ts/"
+
 --- abstract
 
 The initial version of QUIC provides support for path migration.
@@ -44,7 +156,7 @@ of one way delays.
 
 The QUIC Working Group is debating how much priority should be given
 to the support of multipath in QUIC. This is not a new debate. The
-the QUIC transport {{!I-D.ietf-quic-transport}}
+QUIC transport {{QUIC-TRANSPORT}}
 includes a number of mechanisms
 to handle multiple paths, including the support for NAT rebinding
 and for explicit migration.
@@ -67,9 +179,9 @@ sending packets, but even that is optional. The NAT rebinding mechanisms,
 for example, rely on the possibility of receiving packets without
 a preliminary Path Challenge. However, in practice, the sender's
 choice of sending paths is limited by the path migration logic
-in {{!I-D.ietf-quic-transport}}.
+in {{QUIC-TRANSPORT}}.
 
-Path migration according to {{!I-D.ietf-quic-transport}} is always
+Path migration according to {{QUIC-TRANSPORT}} is always
 initiated by the node in the client role. That node will test the validity
 of paths using the path challenge response mechanism, and at some
 point decide to switch all its traffic to a new path. The node in the
@@ -87,14 +199,46 @@ This draft proposes an explicit mechanism for replacing the implicit signalling 
 path migration through data transmission, by means of a new PATH_OPTION
 frame.
 
+## Relation with other drafts
+
+This draft shares a common author and the definition of path management options
+with {{QUIC-MP-LIU}}. The main differences is that this draft the single
+packet number space for application packets defined in {{QUIC-TRANSPORT}},
+instead of using separate number spaces for each path as in {{QUIC-MP-LIU}}.
+Both of these drafts have been implemented, and the lessons derived from
+this implementation exercise are listed in {{implementation-experience}}}.
+
+# Conventions and Definitions {#multipath-definition}
+
+The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT",
+"RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this document are to be interpreted
+as described in BCP 14 {{!RFC2119}} {{!RFC8174}} when, and only when, they appear in all
+capitals, as shown here.
+
+We assume that the reader is familiar with the terminology used in {{QUIC-TRANSPORT}}.
+In addition, we define the following term:
+
+- Path Identifier: An identifier that is used to identify a path in a QUIC connection at an endpoint.
+It is defined as the sequence number of the destination Connection ID used for sending packets
+on that particular path. If the length of the destination Connection ID is zero, the
+identifier is the sequence number of the destination Connection ID used by the peer for sending packets
+on that particular path.
+
+This definition is an extension of the definition of Path Identifier in
+Section 2 of {{QUIC-MP-LIU}}.
+
+
 # Path Management Requirement
 
-Implicit path management, as specified in {{!I-D.ietf-quic-transport}}, fulfills two goals:
+Implicit path management, as specified in {{QUIC-TRANSPORT}}, fulfills two goals:
 it direct a peers to switch sending through a new preferred path, and it allows the peer
 to release resources associated with the old path. Explicit path management will have to
 fulfill similar goals: provide indications to the peer regarding preferred paths for
 receiving data; and, signal to the peer when resource associated with previous paths
 can be discarded.
+
+Explicit path management requires identification of paths. We use here the same
+convention as {{QUIC-MP-LIU}}.
 
 We cannot mandate that path management signals be always carried on the path that
 they affect. For example, consider a node that wants to abandon a path through a
@@ -138,7 +282,7 @@ the following conventions apply:
 * If ack-eliciting frames are received on a path before path management
   frames, the path is placed in the "available" state.
 
-# Path Management Extension
+# Enable Simple Multipath Extension
 
 The path management extension is negotiated by means of the 
 "enable_path_management" transport parameter. When support is
@@ -150,15 +294,15 @@ and PATH_STATUS frames.
 The use of the PATH_IDENTIFICATION and PATH_STATUS transport frame extension
 is negotiated using a transport parameter:
 
-* "enable_path_management" (TBD)
+* "enable_simple_multipath" (TBD)
 
 The "enable_path_management" transport parameter is included if the endpoint
 wants to receive or accepts PATH_IDENTIFICATION and PATH_STATUS frames
 for this connection. This parameter is encoded as a variable integer as specified in
 section 16 of {{!I-D.ietf-quic-transport}}. It
-can take one of the following three values:
+can take one of the following four values:
 
-1. I would like to send PATH_IDENTIFICATION and PATH_STATUS frames
+1. I am able to receive and process data on multiple paths
 2. I am able to process PATH_IDENTIFICATION and PATH_STATUS frames
 3. I am able to process PATH_IDENTIFICATION and PATH_STATUS frames
    and I would like to send them.
@@ -268,7 +412,7 @@ emerge.
 
 Senders MUST manage per-path congestion status, and MUST NOT send more
 data on a given path than congestion control on that path allows. This
-is already a requirement of {{!I-D.ietf-quic-transport}}.
+is already a requirement of {{QUIC-TRANSPORT}}.
 
 In order to implement per path congestion control, the senders maintain
 an association between previously sent packet numbers and the path
@@ -289,6 +433,10 @@ acknowledgements. It is unclear whether this is a problem in practice,
 but this could motivate the use of time stamps {{!I-D.huitema-quic-ts}}
 in conjunction with acknowledgements.
 
+# Implementation Experience
+
+TBD
+
 # Security Considerations
 
 TBD. There are probably ways to abuse this.
@@ -298,26 +446,22 @@ TBD. There are probably ways to abuse this.
 This document registers a new value in the QUIC Transport Parameter
 Registry:
 
-   Value:  TBD (using value 0xe9a in early deployments)
 
-   Parameter Name:  enable_path_management
-
-   Specification:  Indicates support of the Path Management options.
-
-This document also registers 2 new values in the QUIC Frame Type registry:
-
-   Value:  TBD (using value 0x9a1 in early deployments)
-
-   Frame Name:  PATH_IDENTIFICATION
-
-   Specification:  Identification of the path over which a packet is sent.
+Value                        | Parameter Name.   | Specification
+-----------------------------|-------------------|-----------------
+TBD (experiments use 0xbabb) | enable_simple_multipath  | {{enable-simple-multipath}}
+{: #transport-parameters title="Addition to QUIC Transport Parameters Entries"}
 
 
-   Value:  TBD (using value 0x9a5 in early deployments)
+This document refers to two additional frame types also defined
+in {{QUIC-MP-LIU}}:
 
-   Frame Name:  PATH_STATUS
+Value                                              | Frame Name          | Specification
+---------------------------------------------------|---------------------|-----------------
+TBD-02 (experiments use 0xbaba02)                  | QOE_CONTROL_SIGNALS | {{qoe-frame}}
+TBD-03 (experiments use 0xbaba03)                  | PATH_STATUS         | {{path-status-frame}}
+{: #frame-types title="Addition to QUIC Frame Types Entries"}
 
-   Specification:  Identification of the path over which a packet is sent.
 
 
 
