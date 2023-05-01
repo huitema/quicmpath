@@ -1,8 +1,8 @@
 ---
-title: QUIC Multipath Negotiation Option
-abbrev: QUIC Multipath Option
+title: Simple QUIC Multipath Extension
+abbrev: Simple QUIC Multipath
 category: std
-docName: draft-huitema-quic-mpath-option-01
+docName: draft-huitema-quic-mpath-option-02
     
 stand_alone: yes
 
@@ -38,6 +38,24 @@ normative:
         org: Mozilla
         role: editor
 
+  QUIC-TLS:
+    title: "Using TLS to Secure QUIC"
+    date: {DATE}
+    seriesinfo:
+      RFC: 9001
+    author:
+      -
+        ins: M. Thomson
+        name: Martin Thomson
+        org: Mozilla
+        role: editor
+      -
+        ins: S. Turner
+        name: Sean Turner
+        org: sn3rd
+        role: editor
+
+
   QUIC-RECOVERY:
     title: "QUIC Loss Detection and Congestion Control"
     date: {DATE}
@@ -57,15 +75,16 @@ normative:
 
 informative:
 
-  QUIC-MP-LIU:
+  QUIC-MP:
     title: "Multipath Extension for QUIC"
     date: {DATE}
     seriesinfo:
-      Internet-Draft: draft-ietf-quic-recovery
+      Internet-Draft: draft-ietf-quic-multipath
     author:
       -
         ins: Y. Liu
         name: Yanmei Liu
+        role: editor
         org: Alibaba Inc.
         email: miaoji.lym@alibaba-inc.com
       -
@@ -74,21 +93,28 @@ informative:
         org: Alibaba Inc.
         email: yunfei.ma@alibaba-inc.com
       -
+        ins: Q. De Coninck
+        name: Quentin De Coninck
+        role: editor
+        org: UCLouvain
+        email: quentin.deconinck@uclouvain.be
+      -
+        ins: O. Bonaventure
+        name: Olivier Bonaventure
+        org: UCLouvain and Tessares
+        email: olivier.bonaventure@uclouvain.be
+      -
         ins: C. Huitema
         name: Christian Huitema
         org: Private Octopus Inc.
         email: huitema@huitema.net
       -
-        ins: Q. An
-        name: Qing An
-        org: Alibaba Inc.
-        email: anqing.aq@alibaba-inc.com
-      -
-        ins: Z. Li
-        name: Zhenyu Li
-        org: ICT-CAS
-        email: zyli@ict.ac.cn
-    target: "https://datatracker.ietf.org/doc/draft-liu-multipath-quic/"
+        ins: M. Kuehlewind
+        name: Mirja Kuehlewind
+        role: editor
+        org: Ericsson
+        email: mirja.kuehlewind@ericsson.com
+    target: "https://datatracker.ietf.org/doc/draft-ietf-quic-multipath/"
 
   QUIC-DATAGRAM:
     title: "An Unreliable Datagram Extension to QUIC"
@@ -122,14 +148,15 @@ informative:
 
 The initial version of QUIC provides support for path migration.
 We propose a simple mechanism to support not just migration, but
-also simultaneous usage of multiple paths. In its simplest
-form, this mechanisms simply requires that multipath senders
+also simultaneous usage of multiple paths. This mechanism
+requires that multipath senders
 keep track of which packet is sent on what path, and use that
-information to manage congestion control and loss recovery.
-With that, clients can send data on any validated path, and server
-on any validated path on which the client recently sent non-probing
-packets. A more sophisticated mechanism can be negotiated to
-explicitly manage paths and packet scheduling.
+information to manage congestion control and loss recovery. It works
+better if multipath receivers tightly manage the formatting of
+ACK frames. The mechanism does not require change to packet formats,
+encryption methods, encryption key rotation, or the management of
+connection identifiers. All software changes are beneficial to
+both single path and multipath operation.
 
 --- middle
 
@@ -137,8 +164,7 @@ explicitly manage paths and packet scheduling.
 
 The QUIC Working Group is debating how much priority should be given
 to the support of multipath in QUIC. This is not a new debate. The
-QUIC transport {{QUIC-TRANSPORT}}
-includes a number of mechanisms
+QUIC transport {{QUIC-TRANSPORT}} includes a number of mechanisms
 to handle multiple paths, including the support for NAT rebinding
 and for explicit migration.
 
@@ -153,7 +179,7 @@ received.
 
 In theory, that property of QUIC implies that senders could send
 packets using whatever IP addresses or UDP ports they see fit, as long
-as they carry a valid connection ID, and are
+as they carry a valid connection ID and are
 properly encrypted. Senders use the Path Challenge
 and Response mechanism to verify that the path is valid before
 sending packets, but even that is optional. The NAT rebinding mechanisms,
@@ -177,21 +203,25 @@ discard the old path. If the client was to spread data on several paths,
 the server would probably become confused.
 
 This draft proposes a simple mechanism to enable transmission on
-several paths simultaneously. In the simplest form, this only requires
+several paths simultaneously. This requires
 updating the handling of paths specified in {{QUIC-TRANSPORT}} by
-the proposed simple multipath management, see {{simple-multipath-specification}}. As an option,
-endpoints can also negotiate use of the explicit path management
-specified in {{QUIC-MP-LIU}}, see {{mpath-explicit}}.
+the proposed simple multipath management, see {{simple-multipath-specification}},
+that multipath senders
+keep track of which packet is sent on what path, that they use
+this information to manage congestion control and loss recovery,
+and that nodes take path information into account when sending
+ACK_ECN frames. Simple multipath works better if receivers tightly manage
+the formatting of ACK frames. 
 
-## Relation with other drafts
-
-This draft shares a common author with {{QUIC-MP-LIU}}, and refers
-to some of its content.
-The difference is that this draft maintains the single
-packet number space for application packets defined in {{QUIC-TRANSPORT}},
-instead of using separate number spaces for each path as in {{QUIC-MP-LIU}}.
-Both of these drafts have been implemented, and the lessons derived from
-this implementation exercise are listed in {{implementation-considerations}}.
+This draft was initially developed as one of the alternatives that was
+considered for QUIC Multipath Extension {{QUIC-MP}}, which evolved to
+only support a more complex mechanism involving connection identifiers, number
+spaces, path management, acknowledgements and explicit path management.
+The QUIC working group can only adopt one solution, and it is extremely
+unlikely that it would reverse course and adopt the Simple Multipath Extension
+presented here instead of the current design. However, there is historic
+and academic value in fully presenting the simple solution, such as for
+example allowing comparison and informing future designs.
 
 ## Conventions and Definitions {#multipath-definition}
 
@@ -214,6 +244,10 @@ changes to that mechanism:
 
 * Manage the removal of paths that have been abandoned.
 
+* Use path information in congestion control and loss recovery.
+
+* Change the handling of ACK-ECN frames to handle per path ECN
+
 The multipath management is a departure from the specification of path management
 in section 9 of {{QUIC-TRANSPORT}}. As such, it requires negotiation between
 the two endpoints, as specified in {{enable-simple-multipath-extension}}. This negotiation will
@@ -233,25 +267,29 @@ for this connection. This parameter is encoded as a variable integer as specifie
 section 16 of {{QUIC-TRANSPORT}}. It
 can take one of the following values:
 
-1. I am able to receive and process data on multiple paths
-2. I am able to receive and process explicit path management frames
-3. I am able to receive and process explicit path management frames
-   and I would like to send them.
+0. Default value, 0, implies that the simple multipath extension is not supported.
+
+1. The simple path extension is supported, and is preferred over the official
+   multipath support {{QUIC-MP}} if both options are available.
+
+2. The simple path extension is supported, but the official
+   multipath support {{QUIC-MP}} is preferred if both options are available.
 
 Peers receiving another value SHOULD terminate the connection with a TRANSPORT
 PARAMETER error.
 
-The simple multipath option is successfully negotiated if both peers
-propose a non zero value. If the negotiation fail, peers are expected to
-handle paths as specified in section 9 of {{QUIC-TRANSPORT}}.
+The selected option depends on the proposed values, and also on whether the nodes
+are capable of using official multipath support {{QUIC-MP}}:
 
-A peer that advertises its capability of sending explicit path management frames
-using option values 3 MUST NOT send these frames
-if the other peer does not advertise its ability to process them by
-sending the enable_path_management TP with option 2 or 3. 
-If usages of these frames is negotiated, the
-peers shall use the explicit path management option defined in
-{{mpath-explicit}}.
+* if both peers support the simple path extension and one of them does not
+  enable the official multipath version, then the simple path extension
+  is used.
+
+* if both peers support the simple path extension and also enable the
+  official multipath version, then the server preference take precedence.
+  If the server selected the value 1, the simple multipath extension is
+  used. If it selected the value is 2, the official multipath version is used.
+
 
 ## Path Creation and Path Validation
 
@@ -282,7 +320,7 @@ When only one path is available, servers MUST follow the specifications in
 {{QUIC-TRANSPORT}}. When more than one path is available,
 servers shall monitor the arrival of non-probing packets on the
 available paths. Servers SHOULD stop sending traffic on
-paths through which non-probing packet was received in the last 3 path RTTs,
+paths through which no non-probing packet was received in the last 3 path RTTs,
 but MAY ignore that rule if it would disqualify all available paths.
 Server MAY release the resource associated with paths for which
 no non-probing packet was received for a sufficiently long path-idle delay,
@@ -302,57 +340,79 @@ The packet sequence numbers are allocated from the common number space,
 so that for example path number number N could be sent on one path and
 packet number N+1 on another.
 
-ACK frames report the numbers of packets that have
+ACK frames report the packet numbers that have
 been received so far, regardless of the path on which they have
-been received.
+been received. See {{acknowledgement-and-ranges}} for implementation recommendations on
+the selection of packet ranges included in ACK frames. ACK_ECN frames
+report these packet numbers as well, but see {{handling-of-ack-ecn-frames}}
+for rules on reporting ECN numbers per path.
+
+## Handling of ACK ECN Frames
+
+When simple multipath extension is negotiated, the handling of ACK ECN
+frames differs slightly from the specification in section 13.4 of
+{{QUIC-TRANSPORT}}:
+
+* implementations SHOULD count the numbers of received ECT(0),
+ECT(1) and ECT-CE codepoints for each path, instead of for the whole
+connection.
+* the ACK ECN frames MUST carry the number of codepoints received on
+the path over which the ACK_ECN frame is sent, instead of representing
+the number received for all paths.
+
+ECN validation is performed for each path, as specified in section
+13.4.2 of {{QUIC-TRANSPORT}}. If validation fails, endpoints
+that negotiate the simple multipath extension MUST
+disable ECN reporting for that path. Similarly, endpoints that
+negotiate the simple multipath extension and cannot
+count ECN marks for a path MUST disable ECN reporting for that
+path. Obviously, endpoints MAY send ACK frames.
+
+Nodes may send ACK or ACK_ECN frames on any path. However, they SHOULD
+ensure that ACK_ECN frames are regularly sent over each path on which
+new ECN marks have been received.
+
+## Per Path Information For Congestion Control
 
 Senders MUST manage per-path congestion status, and MUST NOT send more
 data on a given path than congestion control on that path allows. This
 is already a requirement of {{QUIC-TRANSPORT}}.
 
-In order to implement per path congestion control, the senders maintain
+In order to perform per-path congestion control, enpoints MUST maintain
+per path information such as losses of packets, received ECN marks or
+variations in measured round trip time.
+
+In practice, maintaining information on losses and round trip times
+requries that senders maintain
 an association between previously sent packet numbers and the path
 over which these packets were sent. When a packet is newly acknowledged,
 the delay between the transmission of that packet and its first
 acknowledgement is used to update the RTT statitics for the sending path,
 and to update the state of the congestion control for that path.
 
-Packet loss detection MUST be adapted to allow for different RTT on
-different paths. For example, timer computations should take into account
-the RTT of the path on which a packet was sent. Detections based on
-packet numbers shall compare a given packet number to the highest
-packet number received for that path.
+## Path Information for Loss Recovery
 
-## Explicit multipath management {#mpath-explicit}
+The packet loss recovery algorithms specified in {{QUIC-RECOVERY}} include
+two mechanisms: Acknowledgement Based Detection and Probe Timeout. Endpoints
+that negotiate the simple multipath extension MUST adapt the loss recovery
+implementation to account for transmission of packets on multiple paths:
 
-The transport parameter negotiation specified in {{enable-simple-multipath-extension}}
-allows parties to negotiate the use of explicit multipath management. When
-validated, this option enables the use of the PATH_STATUS and 
-frames QOE_CONTROL_SIGNALS defined in {{QUIC-MP-LIU}} to manage
-the selection of paths and the scheduling of packets on multiple paths.
-In particular:
+* the round trip time estimation specified in section 5 of {{QUIC-RECOVERY}}
+  MUST be performed per path, instead of globally for the whole connection.
+  The values of min_rtt, smoothed_rtt and rttvar are computed independently
+  for each path.
 
-* The path identifiers used in PATH_STATUS and QOE_CONTROL_SIGNALS frames 
-  SHALL be computed as specified in identify paths as defined in
-  section 4.1 of {{QUIC-MP-LIU}}.
+* per path RTT samples SHOULD be generated when an ACK frame newly acknowledges
+  at least one packet sent on the path if that packet is ack-eliciting, even if
+  the packet number is not the largest acknowledged inthe ACK frame. In that
+  case, the acknowledgment delay SHOULD NOT be substracted from the RTT sample.
 
-* The PATH_STATUS frames SHALL be used to manage paths as specified
-  in section 4.4 and 4.5 of {{QUIC-MP-LIU}}.
+* when performing acknowledgement based detection, the packet number MUST be
+  compared to packet numbers acknowledged on the same path, and the time
+  threshold MUST be computed per path.
 
-* The packet scheduling MAY use the QOE_CONTROL_SIGNALS frames as
-  defined in section 7 of {{QUIC-MP-LIU}}.
-
-## Negotiation of Simple Multipath or MP QUIC
-
-Nodes may be programmed to support either the simple multipath management
-defined in this document or the "Multipath Extension for QUIC" defined
-in {{QUIC-MP-LIU}}. These options are not compatible, and the
-negotiation MUST result in the selection of at most one of these
-options. A QUIC client MAY send transport parameters
-proposing support for both options, but a QUIC server MUST NOT
-propose both options. A QUIC client receiving server transport
-parameters proposing to use both options simultaneously MUST
-terminate the connection with a TRANSPORT PARAMETER error. 
+* the probe timeout algorithm SHOULD be executed per path, and MUST
+  use PTO computed per path.
 
 # Implementation Considerations
 
@@ -427,7 +487,60 @@ transmission is a simplistic form of forward error correction, and
 that a more elaborate form of forward error correction might result
 in better performance.
 
-## Acknowledgement and Ranges
+## Implementing Congestion Control and Loss Recovery
+
+### Linking Packet Numbers and Paths
+
+Per path congestion control and per path loss recovery defined in
+{{per-path-information-for-congestion-control}} and
+{{path-information-for-loss-recovery}} requires linking
+packets and paths. One possible way is to remember three
+variables for each packet awaiting retransmission:
+
+* the global packet number,
+* the local identifier of the path over which the packet was sent
+* a "virtual sequence number" for the packet on the path.
+
+The definition of these variables is illustrated in {{fig-path-virtual-number}}.
+
+~~~
+Path A      packet number       Path B
+
++-----+          +---+
+| A,1 | <------- | 1 |
++-----+          +---+          +-----+
+                 | 2 | -------> | B,1 |
++-----+          +---+          +-----+
+| A,2 | <------- | 3 |
++-----+          +---+
+| A,3 | <------- | 4 |
++-----+          +---+          +-----+
+                 | 5 | -------> | B,2 |
++-----+          +---+          +-----+
+| A,4 | <------- | 6 |
++-----+          +---+
+| A,5 | <------- | 7 |
++-----+          +---+          +-----+
+                 | 8 | -------> | B,3 |
+                 +---+          +-----+
+~~~
+{: #fig-path-virtual-number title="Per path virtual packet number"}
+
+The path identifier is used during the processing of acknowledgement to
+retrieve the path over which the packet was sent, and thus update
+the RTT or the congestion information for that path.
+
+The virtual numbers can be directly used in the ACK based loss detection
+algorithms: a packet can be deemed lost if later packet have been acknowledged
+on the same path, and if the difference between the packet's virtual number is
+larger than a threshold.
+
+This data structure can be used even when the simple multipath option is
+not negotiated. For example, it will automatically handle holes in the
+packet number sequence caused by probes sent on other paths, or by
+protections against optimistic ack attacks. 
+
+### Acknowledgement and Ranges
 
 If senders decide to send packets on paths with different transmission
 delays, some packets will very probably be received out of order.
@@ -453,52 +566,169 @@ acknowledged by the peer.
 so that a series of packets sent from a single path uses a series of
 consecutive sequence numbers without creating holes.
 
-## Computing Path RTT
+This tight management of acknowledgement ranges is beneficial in both
+multipath and single path operation. 
+
+### Computing Path RTT
 
 Acknowledgement delays are the sum of two one-way delays, the delay on the
 packet sending path and the delay on the return path chosen for the
 acknowledgements. When different paths have different characteristics,
-this can cause acknowledgement delays to vary widely. Consider for
-example multipath transmission using both a terrestrial path, with 
-a latency of 50ms in each direction, and a geostationary satellite path,
-with a latency of 300ms in both directions. The acknowledgement delay
-will depend on the combination of paths used for the packet
-transmission and the ACK transmission, as shown in {{path-and-ack-delays}}.
+there is an
+understandable concern that if successive acknowledgements are received
+on different paths, the measured RTT samples will fluctuate widely,
+and that might result in poor performance. In fact, this concern is
+probably not justified.
 
-ACK Path \ Data path         | Terrestrial   | Satellite
------------------------------|-------------------|-----------------
-Terrestrial | 100ms  | 350ms
-Satellite   | 350ms  | 600ms
-{: #path-and-ack-delays title="Example of ACK delays using multiple paths"}
+The computed values reflect both the state of the network path and the
+scheduling decisions by the sender of the ACK or ACK_ECN frames. For
+example, in a configuration mixing long delay satellite links with
+a 300 ms transmission delay in each direction
+and low bandwidth terrestrial links with 50 ms transmission delay,
+we may assume that the ACK frames will be sent over the terrestrial
+link, because that provides the best response time. In that case, the
+computed RTT value for the satellite path will be about 350ms. This
+lower than the 600ms that would be measured if the ACK came over
+the satellite channel, but it is still the right value for computing
+for example the PTO timeout: if an ACK_MP is not received after more
+than 350ms, either the data packet or its ACK were probably lost.
 
-Using the default algorithm specified in {{QUIC-RECOVERY}} would
-result in suboptimal performance, computing average RTT and standard deviation
-from a series of different delay measurements of different combined paths.
-At the same time, early tests show that it is desirable to send ACKs
-through the shortest path, because a shorter ACK delay results
-in a tighter control loop and better performances. The tests also showed
-that it is desirable to send copies of the ACKs on multiple paths,
-for robustness if a path experience sudden losses.
+In general, using the algorithm above will provide good results,
+except if the set of path changes and the ACK sender
+revisits its sending preferences. This is not very
+different from what happens on a single path if the routing changes,
+and the RTT, RTT variance and PTO estimates will rapidly converge to
+the new values. There is however an exception: some congestion
+control functions rely on estimates of the minimum RTT. It might be prudent
+for nodes to remember the path over which the ACK MP that produced
+the minimum RTT was received, and to restart the minimum RTT computation
+if that path is abandoned.
 
-An early implementation mitigated the delay variation issue by using
-time stamps, as specified in {{QUIC-Timestamp}}. When the timestamps are
-present, the implementation can estimate the transmission delay on each
-one-way path, and can then use these one way delays for more efficient
-implementations of recovery and congestion control algorithms.
+# Comparison to the mainline QUIC Multipath draft
 
-If timestamps are not available, implementations could estimate one way
-delays using statistical techniques. For example, in the example shown
-in {{path-and-ack-delays}}, implementations can use use "same path"
-measurements to estimate the one way delay of the terrestrial path to
-about 50ms in each direction, and that of the satellite path to about
-300ms. Further measurements can then be used to maintain estimates of one
-way delay variations, using logical similar to Kalman filters. But
-statistical processing is error rone, and using time stamps provides
-more robust measurements.
+There were prolongated debates in the QUIC WG over whether to adopt a
+single number space solution or a multiple number space solution. The
+discussions considered 4 criteria, efficiency, code complexity,
+handling of ACK, and support for zero-length CID, and the arguments were
+summarized as follow:
+
+* Efficiency:
+    - Multiple PN space is more efficient, due to complete reuse of
+      loss-recovery logic and no additional state
+    - Single PN space is similarly efficient if loss detection is
+      to manage a virtual order per path (see {{linking-packet-numbers-and-paths}})
+* Code complexity:
+    - If efficiency is required, Single PN space requries new code to
+      to manage a virtual order per path
+      (see {{linking-packet-numbers-and-paths}}) and manage ACK size
+      (see {{acknowledgement-and-ranges}})
+    - Multiple PN spaces require multiple instantiations of the loss recovery
+      algorithm for each path
+* ACK handling:
+    - With single PN space,
+      endpoints need to implement an algorithm to manage ACK sizes, (e.g.,
+      {{linking-packet-numbers-and-paths}}), or risk seeing much larger
+      overhead due to ACKs.
+    - With multiple PN spaces, the new MP_ACK frame keeps small-sized ACK for
+      each path; ACK-Delay and ACK-ECN work as expected
+* Zero-length CID:
+    - supported only with single PN space, not supported with multiple
+      PN spaces.
+
+Discussions also mentioned the lack of support for per path ECN in the
+version of simple multipath presented at the time. With those arguments,
+the working group concluded that the "multiple number space" solution was
+a better choice.
+
+A year later, several points surfaced that could well have changed this
+evaluation.
+
+## No change in encryption specification
+
+The encryption specification in {{QUIC-TLS}} requries encrypting
+packets using an AEAD algorithm. AEAD encryption requires a unique nonce
+per packet, which is composed in {{QUIC-TLS}} by mixing an Initial Vector (IV)
+with the 64 bit packet number. The simple multipath extension keeps
+that specification unchanged, but this changes in {{QUIC-MP}},
+because same packet number can be repeated in multiple spaces.In {{QUIC-MP}}
+the nonce is obtained by
+mixing the IV with the packet number and with an identifier of the
+number space.
+
+This requirement was easily met in the software implementations tested
+a year ago, although we knew that it required changes in the API to the
+cryptographic libraries, and that some implementations might find these changes
+difficult to implement. In addition, we have since discovered that
+this change makes hardware offload more complex, because the offload
+engine have to keep track of the mapping between the connection ID in
+the incoming packet and the identifier of the number space.
+
+Hardware offload would probably be simpler with the simple multipath extension
+presented here.
+
+## No impact on key update
+
+QUIC endpoints are supposed to update their encryption keys after a certain
+number of packets have been sent. The update is managed is indicated by a phase
+bit in the packet header. The algorithm uses the packet number to predict which
+version of the encryption key is used for what packet. This is significantly
+harder when using multiple number spaces as in {{QUIC-MP}}, because the key
+rotation has to be coordinated across all these spaces. In contrast, the
+simple multipath extension uses exactly the key mechanisms as specified in
+{{QUIC-TLS}}, without requiring extra code.
+
+## No impact on CID renewal
+
+QUIC endpoints will renew the connection ID used on a given path on occasion,
+in order to improve the privacy of transmissions. This is supported in both
+the simple multipath extension and {{QUIC-MP}}, but there is an extra complexity
+in {{QUIC-MP}}, as renewing the connection identifier also triggers the
+start of a new packet number space. Endpoints need to manage that and somehow
+tie the old and new packet number space together, to avoid a loss
+of efficiency in loss recovery or in congestion control. This is extra complexity,
+directly tied to the use of multiple number space.
+
+## Support for zero length connection identifier
+
+The simple multipath extension does not create any constraint on the use
+of Connection Identifiers. There is no new frame type that would require
+references to path identifiers on connection identifiers. This means
+that the simple multipath extension fully supports the use of zero length
+connection ID, which can significantly reduce the per packet overhead in
+some scenarios. In contrast, the specification in {{QUIC-MP}}
+requires the use of non-zero Connection IDs in both directions, which
+will reduce efficiency in some scenarios.
+
+## Summary of the comparison
+
+One year later, it is pretty clear that the simple multipath extension is
+much easier to implement and to manage than the use of multiple number
+spaces in {{QUIC-MP}}. It does not require any new frame, does not change
+encryption mechanisms, and does not constrain the use of connection identifiers.
+Implementation aiming for efficiency will have to implement solutions similar to
+those described in {{linking-packet-numbers-and-paths}} and
+{{acknowledgement-and-ranges}}, but this extra software can be used
+in both single-path and multipath modes, and provide efficiency gains in
+both modes. Implementations that make the effort will find the efficiency
+of the simple multipath extension very close to that of {{QUIC-MP}}.
+
+Knowing what we now know, the working group may very well have made a different
+decision a year ago. It is probably to late for that now.
 
 # Security Considerations
 
-TBD. There are probably ways to abuse this.
+The simple QUIC multipath extension adds very few mechanisms to {{QUIC-TRANSPORT}},
+and thus expose very few new attacks. There is obviously an increased usage
+of resource when managing multiple paths, which exposes to two new attacks:
+
+* A node might try to increase the number of simulatneous paths in order to
+  exhaust the peer's resource,
+* On path attackers might try to modify the IP headers of QUIC packets in
+  order to mimic NAT rebinding and try to increase the cost of path management.
+
+Versions of these attacks are in fact already possible against {{QUIC-TRANSPORT}},
+and generic mitigations apply, such as limiting the number of path that an endpoint
+is willing to support.
 
 # IANA Considerations
 
@@ -508,9 +738,12 @@ Registry:
 
 Value                        | Parameter Name.   | Specification
 -----------------------------|-------------------|-----------------
-TBD (experiments use 0xbab5) | enable_simple_multipath  | {{enable-simple-multipath-extension}}
+TBD (experiments use 0x29e3d19e) | enable_simple_multipath  | {{enable-simple-multipath-extension}}
 {: #transport-parameters title="Addition to QUIC Transport Parameters Entries"}
 
+Note: the value 0x29e3d19e is picked as random, in accordance with
+section 22.1.2 of {{QUIC-TRANSPORT}}. It is set to the first 32 bits
+of the MD5 hash of "enable-simple-multipath-extension".
 
 --- back
 
